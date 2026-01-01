@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pokémon Collection Lookup</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        
+        h1 {
+            color: white;
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 28px;
+        }
+        
+        .search-box {
+            position: relative;
+            margin-bottom: 20px;
+        }
+        
+        #searchInput {
+            width: 100%;
+            padding: 15px 20px;
+            font-size: 18px;
+            border: none;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            outline: none;
+        }
+        
+        #searchInput:focus {
+            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+        }
+        
+        .loading {
+            text-align: center;
+            color: white;
+            font-size: 16px;
+            margin-top: 20px;
+        }
+        
+        .error {
+            background: #ff6b6b;
+            color: white;
+            padding: 15px;
+            border-radius: 12px;
+            margin-top: 20px;
+            text-align: center;
+        }
+        
+        .results {
+            display: none;
+        }
+        
+        .results.show {
+            display: block;
+        }
+        
+        .result-card {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 15px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        
+        .result-card h3 {
+            color: #667eea;
+            margin-bottom: 15px;
+            font-size: 22px;
+            border-bottom: 2px solid #f0f0f0;
+            padding-bottom: 10px;
+        }
+        
+        .detail-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+        
+        .detail-item {
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .detail-label {
+            font-size: 12px;
+            color: #888;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 4px;
+        }
+        
+        .detail-value {
+            font-size: 16px;
+            color: #333;
+            font-weight: 500;
+        }
+        
+        .no-results {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            text-align: center;
+            color: #888;
+        }
+        
+        .count {
+            color: white;
+            text-align: center;
+            margin-bottom: 15px;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>✨ Shiny Collection Lookup</h1>
+        
+        <div class="search-box">
+            <input 
+                type="text" 
+                id="searchInput" 
+                placeholder="Search by species name..."
+                autocomplete="off"
+            >
+        </div>
+        
+        <div id="loading" class="loading">Loading your collection...</div>
+        <div id="error" class="error" style="display: none;"></div>
+        <div id="count" class="count"></div>
+        <div id="results" class="results"></div>
+    </div>
+
+    <script>
+        const SHEET_ID = '1xXugW2exvTymh1GgjvVX2i0rMVWANwMn3dE58jU5hbU';
+        const SHEET_NAME = 'ZA_Owned_Detailed';
+        const API_KEY = 'AIzaSyBbr5tXG1SwQL7qcLh1RYH9QnCiD18wU_g';
+        
+        let allData = [];
+        
+        // Fetch data from Google Sheets
+        async function fetchSheetData() {
+            try {
+                const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${SHEET_NAME}?key=${API_KEY}`;
+                const response = await fetch(url);
+                
+                if (!response.ok) {
+                    throw new Error('Failed to fetch data from Google Sheets');
+                }
+                
+                const data = await response.json();
+                const rows = data.values;
+                
+                // Skip header row and convert to objects
+                const headers = rows[0];
+                allData = rows.slice(1).map(row => {
+                    const obj = {};
+                    headers.forEach((header, index) => {
+                        obj[header] = row[index] || '';
+                    });
+                    return obj;
+                });
+                
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('searchInput').disabled = false;
+                document.getElementById('searchInput').focus();
+                
+            } catch (error) {
+                document.getElementById('loading').style.display = 'none';
+                const errorDiv = document.getElementById('error');
+                errorDiv.textContent = 'Error loading data: ' + error.message;
+                errorDiv.style.display = 'block';
+            }
+        }
+        
+        // Filter and display results
+        function filterResults(searchTerm) {
+            const resultsDiv = document.getElementById('results');
+            const countDiv = document.getElementById('count');
+            
+            if (!searchTerm.trim()) {
+                resultsDiv.classList.remove('show');
+                countDiv.textContent = '';
+                return;
+            }
+            
+            const filtered = allData.filter(pokemon => 
+                pokemon.Species.toLowerCase().includes(searchTerm.toLowerCase())
+            );
+            
+            if (filtered.length === 0) {
+                resultsDiv.innerHTML = '<div class="no-results">No Pokémon found matching "' + searchTerm + '"</div>';
+                resultsDiv.classList.add('show');
+                countDiv.textContent = '';
+                return;
+            }
+            
+            countDiv.textContent = `Found ${filtered.length} result${filtered.length !== 1 ? 's' : ''}`;
+            
+            resultsDiv.innerHTML = filtered.map(pokemon => `
+                <div class="result-card">
+                    <h3>${pokemon.Species}</h3>
+                    <div class="detail-grid">
+                        <div class="detail-item">
+                            <span class="detail-label">Region Form</span>
+                            <span class="detail-value">${pokemon['Region Form'] || '—'}</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">Cosmetic Form</span>
+                            <span class="detail-value">${pokemon['Cosmetic Form'] || '—'}</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">Gender</span>
+                            <span class="detail-value">${pokemon.Gender || '—'}</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">Alpha State</span>
+                            <span class="detail-value">${pokemon['Alpha State'] || '—'}</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">Ball</span>
+                            <span class="detail-value">${pokemon.Ball || '—'}</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">Nature</span>
+                            <span class="detail-value">${pokemon.Nature || '—'}</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">Location</span>
+                            <span class="detail-value">${pokemon.Location || '—'}</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">Game</span>
+                            <span class="detail-value">${pokemon.Game || '—'}</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">OT</span>
+                            <span class="detail-value">${pokemon.OT || '—'}</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">TID</span>
+                            <span class="detail-value">${pokemon.TID || '—'}</span>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+            
+            resultsDiv.classList.add('show');
+        }
+        
+        // Event listener for search input
+        document.getElementById('searchInput').addEventListener('input', (e) => {
+            filterResults(e.target.value);
+        });
+        
+        // Disable input until data is loaded
+        document.getElementById('searchInput').disabled = true;
+        
+        // Load data on page load
+        fetchSheetData();
+    </script>
+</body>
+</html>
