@@ -92,6 +92,110 @@
             padding-bottom: 10px;
         }
         
+        .missing-section {
+            margin-bottom: 15px;
+        }
+        
+        .missing-label {
+            font-size: 12px;
+            color: #888;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 8px;
+        }
+        
+        .missing-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        
+        .missing-tag {
+            background: #fff3cd;
+            color: #856404;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 500;
+            border: 1px solid #ffc107;
+        }
+        
+        .complete-tag {
+            background: #d4edda;
+            color: #155724;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 500;
+            border: 1px solid #28a745;
+        }
+        
+        .owned-section {
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid #f0f0f0;
+        }
+        
+        .owned-label {
+            font-size: 12px;
+            color: #888;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 8px;
+        }
+        
+        .owned-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        
+        .owned-tag {
+            background: #e8f4fd;
+            color: #1565c0;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 500;
+            border: 1px solid #90caf9;
+        }
+        
+        .no-results {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            text-align: center;
+            color: #888;
+        }
+        
+        .count {
+            color: white;
+            text-align: center;
+            margin-bottom: 15px;
+            font-size: 14px;
+        }
+        
+        .toggle-owned {
+            background: none;
+            border: none;
+            color: #667eea;
+            font-size: 13px;
+            cursor: pointer;
+            margin-top: 10px;
+            text-decoration: underline;
+        }
+        
+        .owned-details {
+            display: none;
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid #f0f0f0;
+        }
+        
+        .owned-details.show {
+            display: block;
+        }
+        
         .detail-grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
@@ -117,19 +221,21 @@
             font-weight: 500;
         }
         
-        .no-results {
-            background: white;
-            border-radius: 12px;
-            padding: 30px;
-            text-align: center;
-            color: #888;
+        .owned-entry {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 10px;
         }
         
-        .count {
-            color: white;
-            text-align: center;
-            margin-bottom: 15px;
-            font-size: 14px;
+        .owned-entry:last-child {
+            margin-bottom: 0;
+        }
+        
+        .owned-entry-header {
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 8px;
         }
     </style>
 </head>
@@ -154,33 +260,91 @@
 
     <script>
         const SHEET_ID = '1xXugW2exvTymh1GgjvVX2i0rMVWANwMn3dE58jU5hbU';
-        const SHEET_NAME = 'ZA_Owned_Detailed';
+        const OWNED_SHEET = 'ZA_Owned_Detailed';
+        const COMBOS_SHEET = 'ZA_Combinations';
         const API_KEY = 'AIzaSyBbr5tXG1SwQL7qcLh1RYH9QnCiD18wU_g';
         
-        let allData = [];
+        let ownedData = [];
+        let combosData = [];
         
-        // Fetch data from Google Sheets
-        async function fetchSheetData() {
-            try {
-                const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${SHEET_NAME}?key=${API_KEY}`;
-                const response = await fetch(url);
-                
-                if (!response.ok) {
-                    throw new Error('Failed to fetch data from Google Sheets');
-                }
-                
-                const data = await response.json();
-                const rows = data.values;
-                
-                // Skip header row and convert to objects
-                const headers = rows[0];
-                allData = rows.slice(1).map(row => {
-                    const obj = {};
-                    headers.forEach((header, index) => {
-                        obj[header] = row[index] || '';
-                    });
-                    return obj;
+        // Create a key for comparison (species + region + cosmetic + gender + alpha)
+        function makeKey(pokemon) {
+            return [
+                (pokemon.Species || '').toLowerCase().trim(),
+                (pokemon['Region Form'] || '').toLowerCase().trim(),
+                (pokemon['Cosmetic Form'] || '').toLowerCase().trim(),
+                (pokemon.Gender || '').toLowerCase().trim(),
+                (pokemon['Alpha State'] || '').toLowerCase().trim()
+            ].join('|');
+        }
+        
+        // Create display label for a combination
+        function makeDisplayLabel(pokemon) {
+            const parts = [];
+            
+            // Add Alpha first if applicable
+            if (pokemon['Alpha State'] && pokemon['Alpha State'].toLowerCase() === 'alpha') {
+                parts.push('Alpha');
+            }
+            
+            // Add Region Form
+            if (pokemon['Region Form']) {
+                parts.push(pokemon['Region Form']);
+            }
+            
+            // Add Cosmetic Form
+            if (pokemon['Cosmetic Form']) {
+                parts.push(pokemon['Cosmetic Form']);
+            }
+            
+            // Add Gender
+            if (pokemon.Gender) {
+                parts.push(pokemon.Gender);
+            }
+            
+            // If nothing special, just say Regular
+            if (parts.length === 0) {
+                return 'Regular';
+            }
+            
+            // If only non-alpha attributes, might want to clarify it's regular
+            if (!parts.includes('Alpha') && pokemon['Alpha State'] && pokemon['Alpha State'].toLowerCase() === 'regular') {
+                // Only add "Regular" if there are other distinguishing features
+                // Otherwise the label would just be the form/gender
+            }
+            
+            return parts.join(' ');
+        }
+        
+        // Fetch data from a sheet
+        async function fetchSheet(sheetName) {
+            const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${sheetName}?key=${API_KEY}`;
+            const response = await fetch(url);
+            
+            if (!response.ok) {
+                throw new Error(`Failed to fetch ${sheetName}`);
+            }
+            
+            const data = await response.json();
+            const rows = data.values;
+            const headers = rows[0];
+            
+            return rows.slice(1).map(row => {
+                const obj = {};
+                headers.forEach((header, index) => {
+                    obj[header] = row[index] || '';
                 });
+                return obj;
+            });
+        }
+        
+        // Fetch all data
+        async function fetchAllData() {
+            try {
+                [ownedData, combosData] = await Promise.all([
+                    fetchSheet(OWNED_SHEET),
+                    fetchSheet(COMBOS_SHEET)
+                ]);
                 
                 document.getElementById('loading').style.display = 'none';
                 document.getElementById('searchInput').disabled = false;
@@ -194,6 +358,15 @@
             }
         }
         
+        // Toggle owned details visibility
+        function toggleOwned(button) {
+            const details = button.nextElementSibling;
+            details.classList.toggle('show');
+            button.textContent = details.classList.contains('show') 
+                ? 'Hide owned details' 
+                : 'Show owned details';
+        }
+        
         // Filter and display results
         function filterResults(searchTerm) {
             const resultsDiv = document.getElementById('results');
@@ -205,67 +378,138 @@
                 return;
             }
             
-            const filtered = allData.filter(pokemon => 
-                pokemon.Species.toLowerCase().includes(searchTerm.toLowerCase())
+            const searchLower = searchTerm.toLowerCase();
+            
+            // Get all possible combinations for matching species
+            const matchingCombos = combosData.filter(pokemon => 
+                pokemon.Species.toLowerCase().includes(searchLower)
             );
             
-            if (filtered.length === 0) {
+            // Get all owned for matching species
+            const matchingOwned = ownedData.filter(pokemon => 
+                pokemon.Species.toLowerCase().includes(searchLower)
+            );
+            
+            if (matchingCombos.length === 0 && matchingOwned.length === 0) {
                 resultsDiv.innerHTML = '<div class="no-results">No Pokémon found matching "' + searchTerm + '"</div>';
                 resultsDiv.classList.add('show');
                 countDiv.textContent = '';
                 return;
             }
             
-            countDiv.textContent = `Found ${filtered.length} result${filtered.length !== 1 ? 's' : ''}`;
+            // Group by species
+            const speciesSet = new Set([
+                ...matchingCombos.map(p => p.Species),
+                ...matchingOwned.map(p => p.Species)
+            ]);
             
-            resultsDiv.innerHTML = filtered.map(pokemon => `
-                <div class="result-card">
-                    <h3>${pokemon.Species}</h3>
-                    <div class="detail-grid">
-                        <div class="detail-item">
-                            <span class="detail-label">Region Form</span>
-                            <span class="detail-value">${pokemon['Region Form'] || '—'}</span>
+            countDiv.textContent = `Found ${speciesSet.size} species`;
+            
+            // Build results for each species
+            const resultsHTML = Array.from(speciesSet).map(species => {
+                const combosForSpecies = matchingCombos.filter(p => p.Species === species);
+                const ownedForSpecies = matchingOwned.filter(p => p.Species === species);
+                
+                // Create set of owned keys
+                const ownedKeys = new Set(ownedForSpecies.map(makeKey));
+                
+                // Find missing combinations
+                const missing = combosForSpecies.filter(combo => !ownedKeys.has(makeKey(combo)));
+                
+                // Create owned summary tags (unique combinations owned)
+                const ownedCombosMap = new Map();
+                ownedForSpecies.forEach(pokemon => {
+                    const label = makeDisplayLabel(pokemon);
+                    if (!ownedCombosMap.has(label)) {
+                        ownedCombosMap.set(label, []);
+                    }
+                    ownedCombosMap.get(label).push(pokemon);
+                });
+                
+                // Missing section HTML
+                let missingHTML = '';
+                if (missing.length === 0) {
+                    missingHTML = `
+                        <div class="missing-section">
+                            <div class="missing-label">Status</div>
+                            <div class="missing-tags">
+                                <span class="complete-tag">✓ Complete!</span>
+                            </div>
                         </div>
-                        <div class="detail-item">
-                            <span class="detail-label">Cosmetic Form</span>
-                            <span class="detail-value">${pokemon['Cosmetic Form'] || '—'}</span>
+                    `;
+                } else {
+                    const missingTags = missing.map(m => 
+                        `<span class="missing-tag">${makeDisplayLabel(m)}</span>`
+                    ).join('');
+                    missingHTML = `
+                        <div class="missing-section">
+                            <div class="missing-label">Missing (${missing.length})</div>
+                            <div class="missing-tags">${missingTags}</div>
                         </div>
-                        <div class="detail-item">
-                            <span class="detail-label">Gender</span>
-                            <span class="detail-value">${pokemon.Gender || '—'}</span>
-                        </div>
-                        <div class="detail-item">
-                            <span class="detail-label">Alpha State</span>
-                            <span class="detail-value">${pokemon['Alpha State'] || '—'}</span>
-                        </div>
-                        <div class="detail-item">
-                            <span class="detail-label">Ball</span>
-                            <span class="detail-value">${pokemon.Ball || '—'}</span>
-                        </div>
-                        <div class="detail-item">
-                            <span class="detail-label">Nature</span>
-                            <span class="detail-value">${pokemon.Nature || '—'}</span>
-                        </div>
-                        <div class="detail-item">
-                            <span class="detail-label">Location</span>
-                            <span class="detail-value">${pokemon.Location || '—'}</span>
-                        </div>
-                        <div class="detail-item">
-                            <span class="detail-label">Game</span>
-                            <span class="detail-value">${pokemon.Game || '—'}</span>
-                        </div>
-                        <div class="detail-item">
-                            <span class="detail-label">OT</span>
-                            <span class="detail-value">${pokemon.OT || '—'}</span>
-                        </div>
-                        <div class="detail-item">
-                            <span class="detail-label">TID</span>
-                            <span class="detail-value">${pokemon.TID || '—'}</span>
-                        </div>
+                    `;
+                }
+                
+                // Owned summary tags
+                const ownedTags = Array.from(ownedCombosMap.keys()).map(label => 
+                    `<span class="owned-tag">${label}</span>`
+                ).join('');
+                
+                const ownedSummaryHTML = ownedForSpecies.length > 0 ? `
+                    <div class="owned-section">
+                        <div class="owned-label">Owned (${ownedForSpecies.length})</div>
+                        <div class="owned-tags">${ownedTags}</div>
                     </div>
-                </div>
-            `).join('');
+                ` : '';
+                
+                // Detailed owned entries (collapsible)
+                const ownedDetailsHTML = ownedForSpecies.length > 0 ? `
+                    <button class="toggle-owned" onclick="toggleOwned(this)">Show owned details</button>
+                    <div class="owned-details">
+                        ${ownedForSpecies.map(pokemon => `
+                            <div class="owned-entry">
+                                <div class="owned-entry-header">${makeDisplayLabel(pokemon)}</div>
+                                <div class="detail-grid">
+                                    <div class="detail-item">
+                                        <span class="detail-label">Ball</span>
+                                        <span class="detail-value">${pokemon.Ball || '—'}</span>
+                                    </div>
+                                    <div class="detail-item">
+                                        <span class="detail-label">Nature</span>
+                                        <span class="detail-value">${pokemon.Nature || '—'}</span>
+                                    </div>
+                                    <div class="detail-item">
+                                        <span class="detail-label">Location</span>
+                                        <span class="detail-value">${pokemon.Location || '—'}</span>
+                                    </div>
+                                    <div class="detail-item">
+                                        <span class="detail-label">Game</span>
+                                        <span class="detail-value">${pokemon.Game || '—'}</span>
+                                    </div>
+                                    <div class="detail-item">
+                                        <span class="detail-label">OT</span>
+                                        <span class="detail-value">${pokemon.OT || '—'}</span>
+                                    </div>
+                                    <div class="detail-item">
+                                        <span class="detail-label">TID</span>
+                                        <span class="detail-value">${pokemon.TID || '—'}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                ` : '';
+                
+                return `
+                    <div class="result-card">
+                        <h3>${species}</h3>
+                        ${missingHTML}
+                        ${ownedSummaryHTML}
+                        ${ownedDetailsHTML}
+                    </div>
+                `;
+            }).join('');
             
+            resultsDiv.innerHTML = resultsHTML;
             resultsDiv.classList.add('show');
         }
         
@@ -278,7 +522,7 @@
         document.getElementById('searchInput').disabled = true;
         
         // Load data on page load
-        fetchSheetData();
+        fetchAllData();
     </script>
 </body>
 </html>
