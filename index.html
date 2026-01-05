@@ -267,15 +267,40 @@
         let ownedData = [];
         let combosData = [];
         
-        // Create a key for comparison (species + region + cosmetic + gender + alpha)
-        function makeKey(pokemon) {
-            return [
-                (pokemon.Species || '').toLowerCase().trim(),
-                (pokemon['Region Form'] || '').toLowerCase().trim(),
-                (pokemon['Cosmetic Form'] || '').toLowerCase().trim(),
-                (pokemon.Gender || '').toLowerCase().trim(),
-                (pokemon['Alpha State'] || '').toLowerCase().trim()
-            ].join('|');
+        // Create a key for comparison, only including fields that matter for this species
+        // The `fields` param specifies which fields are relevant based on the combinations sheet
+        function makeKey(pokemon, fields = { region: true, cosmetic: true, gender: true, alpha: true }) {
+            const parts = [(pokemon.Species || '').toLowerCase().trim()];
+            
+            if (fields.region) {
+                parts.push((pokemon['Region Form'] || '').toLowerCase().trim());
+            }
+            if (fields.cosmetic) {
+                parts.push((pokemon['Cosmetic Form'] || '').toLowerCase().trim());
+            }
+            if (fields.gender) {
+                parts.push((pokemon.Gender || '').toLowerCase().trim());
+            }
+            if (fields.alpha) {
+                parts.push((pokemon['Alpha State'] || '').toLowerCase().trim());
+            }
+            
+            return parts.join('|');
+        }
+        
+        // Determine which fields matter for a species based on the combinations sheet
+        function getRelevantFields(combosForSpecies) {
+            // A field matters if ANY combo for this species has a non-empty value for it
+            const hasRegion = combosForSpecies.some(c => c['Region Form'] && c['Region Form'].trim());
+            const hasCosmetic = combosForSpecies.some(c => c['Cosmetic Form'] && c['Cosmetic Form'].trim());
+            const hasGender = combosForSpecies.some(c => c.Gender && c.Gender.trim());
+            // Alpha always matters since that's the core distinction
+            return {
+                region: hasRegion,
+                cosmetic: hasCosmetic,
+                gender: hasGender,
+                alpha: true
+            };
         }
         
         // Create display label for a combination
@@ -410,11 +435,14 @@
                 const combosForSpecies = matchingCombos.filter(p => p.Species === species);
                 const ownedForSpecies = matchingOwned.filter(p => p.Species === species);
                 
-                // Create set of owned keys
-                const ownedKeys = new Set(ownedForSpecies.map(makeKey));
+                // Determine which fields matter for this species
+                const relevantFields = getRelevantFields(combosForSpecies);
+                
+                // Create set of owned keys using only relevant fields
+                const ownedKeys = new Set(ownedForSpecies.map(p => makeKey(p, relevantFields)));
                 
                 // Find missing combinations
-                const missing = combosForSpecies.filter(combo => !ownedKeys.has(makeKey(combo)));
+                const missing = combosForSpecies.filter(combo => !ownedKeys.has(makeKey(combo, relevantFields)));
                 
                 // Create owned summary tags (unique combinations owned)
                 const ownedCombosMap = new Map();
